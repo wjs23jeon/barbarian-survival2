@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#171717">
+<link rel="manifest" href="manifest.webmanifest">
+<title>바바리안: 미궁 생존기</title>
+<style>
+:root{color-scheme:dark;--bg:#171717;--panel:#262626;--line:#454545;--muted:#aaa;--accent:#b77932}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f5f0e8;font:15px system-ui,sans-serif}
+main{max-width:560px;margin:auto;padding:14px;display:grid;gap:11px}
+header,.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:12px}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{font-size:20px;margin:0}.muted{color:var(--muted);font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px;font-size:13px}
+.bar{height:8px;background:#444;border-radius:8px;margin-top:5px;overflow:hidden}.bar i{display:block;height:100%;background:#c64c43}
+#map{display:grid;grid-template-columns:repeat(11,1fr);gap:3px;background:#111;padding:6px;border-radius:9px;max-width:420px;margin:auto}
+.tile{aspect-ratio:1;display:grid;place-items:center;background:#756e64;border-radius:3px;font-size:clamp(15px,4.5vw,23px)}
+.wall{background:#343434}.fog{background:#202020;color:#555}
+button{background:#333;color:white;border:1px solid #555;border-radius:10px;padding:12px 8px;font-weight:700;font-size:14px}
+button:active{background:#65503a}button:disabled{opacity:.4}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,48px);gap:5px;justify-content:center}
+.dpad button{font-size:20px;padding:3px}
+#log{height:110px;overflow:auto;font-size:12px;line-height:1.7;color:#ddd}
+#ending{display:none;text-align:center}
+</style>
+</head>
+<body><main>
+<header><div><h1>⚔️ 바바리안: 미궁 생존기</h1><div class="muted">개인용 오프라인 RPG · HARD</div></div><b id="floor">1층</b></header>
+<section class="stats">
+<div class="stat">❤️ 체력 <b id="hpnum">100/100</b><div class="bar"><i id="hpbar" style="width:100%"></i></div></div>
+<div class="stat">⚔️ 공격력 <b id="atk">12</b><div class="muted" id="weapon">맨손</div></div>
+<div class="stat">🛡️ 방어력 <b id="def">3</b><div class="muted" id="armor">가죽옷</div></div>
+</section>
+<section class="panel" style="display:flex;justify-content:space-between"><div><b id="hero">바바리안 Lv.1</b><div class="muted" id="xp">경험치 0/30</div></div><div style="text-align:right"><b id="potions">🧪 물약 x2</b><div class="muted" id="gold">금화 0</div></div></section>
+<section class="panel"><div style="display:flex;justify-content:space-between;margin-bottom:9px"><b>🗺️ 미궁 탐험</b><span class="muted" id="turn">TURN 0</span></div><div id="map"></div><div class="muted" style="margin-top:8px">🪓 나 · 👹 몬스터 · 🧪 물약 · 🪙 금화 · 🪜 출구</div></section>
+<section class="panel"><b>조작</b><div class="actions" style="margin:9px 0"><button id="attack">⚔️ 공격</button><button id="potion">🧪 물약</button><button id="guard">🛡️ 방어</button></div>
+<div class="dpad"><span></span><button data-m="0,-1">▲</button><span></span><button data-m="-1,0">◀</button><button data-m="0,1">▼</button><button data-m="1,0">▶</button></div>
+<div class="muted" style="text-align:center;margin-top:5px">화살표 버튼으로 이동</div></section>
+<section class="panel"><b>📜 모험 기록</b><div id="log" aria-live="polite"></div></section>
+<section id="ending" class="panel"><h2 id="endtitle">GAME OVER</h2><p id="enddesc"></p><button id="restart">새 모험 시작</button></section>
+<div style="display:flex;gap:8px"><button id="save" style="flex:1">저장</button><button id="reset" style="flex:1">새 게임</button></div>
+<div class="muted">게임은 이 기기의 브라우저 저장공간에 자동 저장됩니다. 브라우저 데이터 삭제 시 기록도 사라질 수 있습니다.</div>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),W=11,H=9;
+let s,grid,seen,logs=[];
+const enemiesName=['동굴 고블린','썩은 해골','미궁 늑대','오크 전사','광폭한 트롤','미궁의 수호자'];
+function say(t){logs.unshift(t);logs=logs.slice(0,24);$('log').innerHTML=logs.map(x=>'› '+x).join('<br>');}
+function save(){try{localStorage.setItem('barbarianSave',JSON.stringify({s,grid,seen,logs}));}catch(e){}}
+function load(){try{let v=JSON.parse(localStorage.getItem('barbarianSave'));if(v&&v.s&&v.grid){s=v.s;grid=v.grid;seen=v.seen;logs=v.logs||[];return true}}catch(e){}return false}
+function fresh(){s={x:1,y:1,hp:100,max:100,atk:12,def:3,level:1,xp:0,next:30,potions:2,gold:0,floor:1,turn:0,kills:0,dead:false,guard:false,enemies:[],loot:null};logs=[];makeFloor();say('어둠 속에서 눈을 떴다. 살아서 3층까지 도달하라.');render();}
+function makeFloor(){grid=Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=>(!x||!y||x===W-1||y===H-1)?1:0));for(let i=0;i<12;i++){let x=1+Math.random()*9|0,y=1+Math.random()*7|0;if((x===1&&y===1)||(x===9&&y===7))continue;grid[y][x]=1;}grid[7][9]=2;s.x=1;s.y=1;s.enemies=[];seen=Array.from({length:H},()=>Array(W).fill(false));for(let i=0;i<3+s.floor;i++){let x,y,n=0;do{x=1+Math.random()*9|0;y=1+Math.random()*7|0;n++}while((grid[y][x]!==0||(x===1&&y===1)||Math.abs(x-1)+Math.abs(y-1)<3)&&n<100);if(n<100){let hp=14+s.floor*7;s.enemies.push({x,y,hp,atk:4+s.floor*2,def:Math.floor(s.floor/3),name:enemiesName[Math.min(5,Math.floor((s.floor-1)/1.5))]});}}}
+function enemyAt(x,y){return s.enemies.find(e=>e.x===x&&e.y===y)}
+function level(){while(s.xp>=s.next){s.xp-=s.next;s.level++;s.next=Math.floor(s.next*1.5);s.max+=15;s.hp=s.max;s.atk+=3;s.def++;say('✨ 레벨 업! Lv.'+s.level+' · 체력 완전 회복');}}
+function enemyTurn(){for(let e of [...s.enemies]){if(s.hp<=0)break;let dx=s.x-e.x,dy=s.y-e.y,d=Math.abs(dx)+Math.abs(dy);if(d===1){let n=Math.max(1,e.atk-s.def-(Math.random()*2|0));if(s.guard)n=Math.max(1,Math.floor(n*.35));s.hp-=n;say(e.name+'의 공격! '+n+' 피해');}else if(d<8){let mx=Math.abs(dx)>Math.abs(dy)?Math.sign(dx):0,my=mx?0:Math.sign(dy),nx=e.x+mx,ny=e.y+my;if(grid[ny]?.[nx]===0&&!enemyAt(nx,ny)&&!(nx===s.x&&ny===s.y)){e.x=nx;e.y=ny;}}}if(s.hp<=0){s.hp=0;s.dead=true;say('💀 쓰러졌다. 미궁은 자비롭지 않다.');$('ending').style.display='block';$('endtitle').textContent='GAME OVER';$('enddesc').textContent=s.floor+'층 · 처치 '+s.kills+'마리';}save();}
+function strike(e){let n=Math.max(1,s.atk-e.def+(Math.random()*5|0)-1);e.hp-=n;s.turn++;s.guard=false;say('⚔️ '+e.name+'에게 '+n+' 피해');if(e.hp<=0){s.enemies=s.enemies.filter(x=>x!==e);s.kills++;s.xp+=12+s.floor*3;s.gold+=5+s.floor*3;say('☠️ 처치! 경험치와 금화를 획득했다.');level();if(!s.loot&&Math.random()<.4)s.loot={x:e.x,y:e.y,type:Math.random()<.6?'potion':'gold'};}enemyTurn();render();}
+function move(dx,dy){if(s.dead)return;let x=s.x+dx,y=s.y+dy;if(grid[y]?.[x]===undefined||grid[y][x]===1){say('벽에 막혔다.');return;}let e=enemyAt(x,y);if(e){strike(e);return;}s.x=x;s.y=y;s.turn++;s.guard=false;if(grid[y][x]===2){if(s.floor===3){s.dead=true;$('ending').style.display='block';$('endtitle').textContent='🏆 미궁 정복';$('enddesc').textContent='3층 정복! 처치 '+s.kills+'마리 · 금화 '+s.gold;save();render();return;}s.floor++;s.hp=Math.min(s.max,s.hp+15);makeFloor();say(s.floor+'층에 도착했다. 더 강한 적들이 기다린다.');render();return;}if(s.loot&&s.loot.x===x&&s.loot.y===y){if(s.loot.type==='potion'){s.potions++;say('🧪 회복 물약 획득!');}else{s.gold+=15;say('🪙 금화 15개 획득!');}s.loot=null;}enemyTurn();render();}
+function attack(){if(s.dead)return;let e=s.enemies.find(e=>Math.abs(e.x-s.x)+Math.abs(e.y-s.y)===1);if(e)strike(e);else say('공격할 적이 인접해 있지 않다.');}
+function potion(){if(s.dead)return;if(!s.potions)return say('물약이 없다.');if(s.hp===s.max)return say('체력이 가득 찼다.');let n=Math.min(35,s.max-s.hp);s.hp+=n;s.potions--;s.turn++;say('🧪 체력 '+n+' 회복');enemyTurn();render();}
+function guard(){if(s.dead)return;s.guard=true;s.turn++;say('🛡️ 방어 자세! 다음 공격 피해 감소');enemyTurn();s.guard=false;render();}
+function render(){ $('floor').textContent=s.floor+'층';$('turn').textContent='TURN '+s.turn;$('hpnum').textContent=s.hp+'/'+s.max;$('hpbar').style.width=(100*s.hp/s.max)+'%';$('atk').textContent=s.atk;$('def').textContent=s.def;$('hero').textContent='바바리안 Lv.'+s.level;$('xp').textContent='경험치 '+s.xp+'/'+s.next;$('potions').textContent='🧪 물약 x'+s.potions;$('gold').textContent='금화 '+s.gold;
+let out='';for(let y=0;y<H;y++)for(let x=0;x<W;x++){let d=Math.abs(x-s.x)+Math.abs(y-s.y),v=d<=3;seen[y][x] ||= v;let sym='',cls='';if(!seen[y][x]){sym='';cls='fog';}else if(grid[y][x]===1)cls='wall';else if(x===s.x&&y===s.y)sym='🪓';else if(grid[y][x]===2)sym='🪜';else{let e=enemyAt(x,y);if(e)sym='👹';else if(s.loot&&s.loot.x===x&&s.loot.y===y)sym=s.loot.type==='potion'?'🧪':'🪙';}out+='<div class="tile '+cls+'">'+sym+'</div>';} $('map').innerHTML=out;$('log').innerHTML=logs.map(x=>'› '+x).join('<br>');save();}
+document.querySelectorAll('[data-m]').forEach(b=>b.addEventListener('click',()=>{let a=b.dataset.m.split(',').map(Number);move(a[0],a[1]);}));$('attack').onclick=attack;$('potion').onclick=potion;$('guard').onclick=guard;$('save').onclick=()=>{save();say('현재 진행 상황을 저장했다.');};$('reset').onclick=()=>{if(confirm('현재 모험을 지우고 새로 시작할까?')){localStorage.removeItem('barbarianSave');fresh();}};$('restart').onclick=()=>{localStorage.removeItem('barbarianSave');$('ending').style.display='none';fresh();};
+window.addEventListener('keydown',e=>{let m={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};if(m[e.key]){e.preventDefault();move(...m[e.key]);}});
+if(!load())fresh();else{say('저장된 모험을 불러왔다.');render();}
+if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+})();
+</script></body></html>
